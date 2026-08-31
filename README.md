@@ -40,9 +40,9 @@ Multi-Source Oracle `update`: [tx](https://explorer-bradbury.genlayer.com/tx/0x5
 - `node tests/smoke.onchain.mjs`
 
 
-Interactive multi-contract dApp on GenLayer Testnet Bradbury. A thin browser client that submits real inputs to four Intelligent Contracts (three long-lived plus an on-demand AI escrow) and reads their on-chain state. Every consensus-critical decision (moderation verdicts, market outcomes, oracle values, escrow settlements) is computed and stored on-chain by the contracts; the frontend never decides anything.
+Interactive multi-contract dApp on GenLayer Testnet Bradbury. A thin browser client that submits real inputs to three Intelligent Contracts and reads their on-chain state. Every consensus-critical decision (moderation verdicts, market outcomes, oracle values) is computed and stored on-chain by the contracts; the frontend never decides anything.
 
-Live app: <https://artem1981777.github.io/genlayer-dashboard/>
+Live app: <https://artem1981777.github.io/genlayer-consensus-console/>
 
 ## Reviewer fixes -- round 2
 
@@ -90,7 +90,7 @@ Source: apps/multi-source-oracle/contracts/oracle.py
 - Content Moderator: 0xc87881c7223e1d47Bf13EBDC50ADFaA0d0EFC4dC
 - Content Moderator (portal-registered revision): 0x235f51b11b9f96d6673df37553ef58373c4324f9
 - Multi-Source Oracle: 0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82
-- AI Escrow Arbiter (portal-registered): 0x6f33FF874366aEd9B071505Ffa1057072b8FC37C
+- AI Escrow Arbiter (bonus demo — not part of this submission): 0x6f33FF874366aEd9B071505Ffa1057072b8FC37C
 
 ## Write lifecycle
 
@@ -143,11 +143,11 @@ Deployments:
 - Content Moderator deploy: <https://explorer-bradbury.genlayer.com/tx/0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867>
 
 
-## AI Escrow Arbiter
+## AI Escrow Arbiter (bonus demo — not part of this submission)
 
-Interactive AI-adjudicated escrow, available in the dashboard at the /escrow route.
+Not one of the three claimed Intelligent Contracts in this submission — included only as an optional in-browser demo. Interactive AI-adjudicated escrow, available in the dashboard at the /escrow route.
 
-Live dApp: <https://artem1981777.github.io/genlayer-dashboard/escrow/>
+Live dApp: <https://artem1981777.github.io/genlayer-consensus-console/escrow/>
 Contract source: embedded in src/lib/escrow.ts (ESCROW_SOURCE), deployed fresh from the browser per escrow.
 
 Instead of a human middleman, a validator-consensed AI decides whether held funds are released to the seller or refunded to the buyer, based on the escrow terms and the evidence submitted on-chain. The frontend is a full Web3 dApp: EIP-6963 wallet connection, automatic network switch to Testnet Bradbury, browser deployment, funding, evidence submission, AI resolution and payout — every step an on-chain transaction.
