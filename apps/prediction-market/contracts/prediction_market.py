@@ -2,6 +2,7 @@
 from genlayer import *
 import json
 import hashlib
+from datetime import datetime, timezone
 # EVM interface used only to send native GEN to an address (external message, on finalization)
 @gl.evm.contract_interface
 class _NativeRecipient:
@@ -29,7 +30,19 @@ class PredictionMarketResolver(gl.Contract):
     positions: str
     claims: str
     history: str
-    def __init__(self, question: str, rules: str, source1: str, source2: str, source3: str, market_id: str):
+    # lifecycle: source/config freeze at first stake (reviewer point 1)
+    staking_started: bool
+    first_stake_time: int
+    sources_frozen: bool
+    frozen_sources: str
+    frozen_config_hash: str
+    # lifecycle: mandatory time-based dispute window (reviewer point 2)
+    dispute_window_seconds: int
+    resolve_time: int
+    dispute_deadline: int
+    # lifecycle: why a market ended in VOID (reviewer point 3)
+    void_reason: str
+    def __init__(self, question: str, rules: str, source1: str, source2: str, source3: str, market_id: str, dispute_window_seconds: int):
         self.market_id = market_id.strip() if market_id.strip() else "market-1"
         self.creator = str(gl.message.sender_address)
         self.question = question
@@ -49,6 +62,29 @@ class PredictionMarketResolver(gl.Contract):
         self.positions = "{}"
         self.claims = "{}"
         self.history = "[]"
+        self.staking_started = False
+        self.first_stake_time = 0
+        self.sources_frozen = False
+        self.frozen_sources = "[]"
+        self.frozen_config_hash = ""
+        w = int(dispute_window_seconds)
+        assert w > 0, "Dispute window must be a positive number of seconds"
+        self.dispute_window_seconds = w
+        self.resolve_time = 0
+        self.dispute_deadline = 0
+        self.void_reason = ""
+    # Chain time of the current transaction, as epoch seconds. GenLayer stamps every
+    # message with an RFC3339 datetime (same value for all validators of a tx), so
+    # time-based windows are deterministic under consensus.
+    def _now(self) -> int:
+        s = str(gl.message.raw["datetime"]).strip()
+        assert s != "", "Chain datetime is unavailable in this transaction"
+        if s.endswith("Z") or s.endswith("z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
     def _load_json(self, raw: str, default):
         try:
             return json.loads(raw)
@@ -85,7 +121,7 @@ class PredictionMarketResolver(gl.Contract):
     @gl.public.view
     def get_state(self) -> dict:
         yes_pool, no_pool = self._pools()
-        return {"market_id": self.market_id, "creator": self.creator, "question": self.question, "rules": self.rules, "source1": self.source1, "source2": self.source2, "source3": self.source3, "question_hash": self.question_hash, "rules_hash": self.rules_hash, "status": self.status, "outcome": self.outcome, "rationale": self.rationale, "dispute_note": self.dispute_note, "dispute_outcome": self.dispute_outcome, "winning_side": self.winning_side, "settled_outcome": self.settled_outcome, "yes_pool": yes_pool, "no_pool": no_pool, "total_pool": yes_pool + no_pool, "positions": self.positions, "claims": self.claims, "history": self.history}
+        return {"market_id": self.market_id, "creator": self.creator, "question": self.question, "rules": self.rules, "source1": self.source1, "source2": self.source2, "source3": self.source3, "question_hash": self.question_hash, "rules_hash": self.rules_hash, "status": self.status, "outcome": self.outcome, "rationale": self.rationale, "dispute_note": self.dispute_note, "dispute_outcome": self.dispute_outcome, "winning_side": self.winning_side, "settled_outcome": self.settled_outcome, "staking_started": self.staking_started, "first_stake_time": self.first_stake_time, "sources_frozen": self.sources_frozen, "frozen_sources": self.frozen_sources, "frozen_config_hash": self.frozen_config_hash, "dispute_window_seconds": self.dispute_window_seconds, "resolve_time": self.resolve_time, "dispute_deadline": self.dispute_deadline, "void_reason": self.void_reason, "yes_pool": yes_pool, "no_pool": no_pool, "total_pool": yes_pool + no_pool, "positions": self.positions, "claims": self.claims, "history": self.history}
     @gl.public.view
     def verify_question(self, q: str) -> bool:
         return hashlib.sha256(q.encode("utf-8")).hexdigest() == self.question_hash
@@ -133,6 +169,7 @@ class PredictionMarketResolver(gl.Contract):
         caller = str(gl.message.sender_address)
         assert caller == self.creator, "Only the market creator can add a source"
         assert self.status == "open", "Market already resolved"
+        assert not self.sources_frozen, "Sources are frozen: staking has started, the source set is locked for the rest of the lifecycle"
         assert url.startswith("http://") or url.startswith("https://"), "Source must be an http(s) URL"
         assert self.source1 == "" or self.source2 == "" or self.source3 == "", "All three source slots are already set"
         if self.source1 == "":
@@ -149,6 +186,15 @@ class PredictionMarketResolver(gl.Contract):
         amt = int(gl.message.value)
         assert amt > 0, "Stake must send a positive amount of GEN"
         caller = str(gl.message.sender_address)
+        # First stake freezes the market: from here on the source set and the
+        # market config (question + rules + sources) are immutable on-chain.
+        if not self.sources_frozen:
+            self.sources_frozen = True
+            self.staking_started = True
+            self.first_stake_time = self._now()
+            self.frozen_sources = json.dumps([u for u in (self.source1, self.source2, self.source3) if u != ""])
+            self.frozen_config_hash = hashlib.sha256("|".join([self.question, self.rules, self.source1, self.source2, self.source3]).encode("utf-8")).hexdigest()
+            self._append_history("freeze", caller, "first stake: source set and market config frozen")
         pos = self._positions()
         cur = pos.get(caller)
         if not isinstance(cur, dict):
@@ -167,13 +213,18 @@ class PredictionMarketResolver(gl.Contract):
         assert len(urls) > 0, "No resolution source configured"
         self._resolve_now("")
         if self.outcome in ("YES", "NO"):
-            self.status = "resolved"
+            # Resolution opens a MANDATORY time-based dispute window; settlement
+            # is impossible until the window closes (reviewer point 2).
+            self.resolve_time = self._now()
+            self.dispute_deadline = self.resolve_time + self.dispute_window_seconds
+            self.status = "dispute_window"
         else:
             self.status = "open"
         self._append_history("initial", caller, "")
     @gl.public.write
     def dispute(self, reason: str):
-        assert self.status == "resolved", "Can only dispute a resolved (not yet settled) market"
+        assert self.status in ("dispute_window", "dispute_resolved"), "Can only dispute while a dispute window is open"
+        assert self._now() < self.dispute_deadline, "Dispute window has closed; the resolved outcome is final"
         assert len(reason.strip()) > 0, "Dispute must include a reason"
         caller = str(gl.message.sender_address)
         mine = self._positions().get(caller)
@@ -198,14 +249,32 @@ class PredictionMarketResolver(gl.Contract):
             self.dispute_outcome = "OVERTURNED"
         else:
             self.dispute_outcome = "UPHELD"
-        self.status = "resolved"
+        self.status = "dispute_resolved"
+        # Every resolution event (initial or post-dispute) opens a fresh mandatory
+        # dispute window, so a possibly-overturned outcome can still be contested.
+        self.resolve_time = self._now()
+        self.dispute_deadline = self.resolve_time + self.dispute_window_seconds
         self._append_history("resolve_dispute", caller, self.dispute_note)
     @gl.public.write
     def settle(self):
         caller = str(gl.message.sender_address)
         assert caller == self.creator, "Only the market creator can settle"
-        assert self.status == "resolved", "Can only settle a resolved market"
+        assert self.status in ("dispute_window", "dispute_resolved"), "Can only settle after resolution, once the dispute window has closed"
         assert self.outcome in ("YES", "NO"), "Cannot settle an UNRESOLVED market"
+        assert self._now() >= self.dispute_deadline, "Dispute window is still open; settlement unlocks after the deadline"
+        yes_pool, no_pool = self._pools()
+        winning_pool = yes_pool if self.outcome == "YES" else no_pool
+        if winning_pool == 0:
+            # Recovery path (reviewer point 3): nobody backed the winning side, so
+            # there is nobody to pay out to. Transition to VOID and open refunds
+            # so every participant can reclaim their original stake.
+            self.settled_outcome = self.outcome
+            self.winning_side = ""
+            self.void_reason = "winning_side_empty"
+            self.status = "voided"
+            self.claims = "{}"
+            self._append_history("auto_void", caller, "winning side had zero stake; market voided so every participant can refund")
+            return
         self.settled_outcome = self.outcome
         self.winning_side = self.outcome
         self.status = "settled"
@@ -215,9 +284,10 @@ class PredictionMarketResolver(gl.Contract):
     def void(self):
         caller = str(gl.message.sender_address)
         assert caller == self.creator, "Only the market creator can void"
-        assert self.status == "open", "Can only void a market that has not resolved to a definite YES/NO"
+        assert self.status in ("open", "dispute_window", "dispute_resolved"), "Can only void a market that has not settled"
         assert self.outcome in ("", "UNRESOLVED"), "Cannot void a market with a definite YES/NO outcome; settle it instead"
         self.winning_side = ""
+        self.void_reason = "creator_void"
         self.status = "voided"
         self.claims = "{}"
         self._append_history("void", caller, "")

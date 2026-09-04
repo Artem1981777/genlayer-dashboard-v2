@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.4.0 — Dispute-window & market-lifecycle UI — 2026-09-04
+
+### Added
+- **Live dispute-window countdown** (`src/components/dispute-countdown.tsx`): ticks every second against the on-chain `dispute_deadline` (epoch seconds stored by `resolve()` / `resolve_dispute()`), shows % elapsed, an elapsed progress bar, warn color under 5 minutes, the exact local time settlement unlocks, and flips to a "window closed · outcome final · settlement unlocked" tag the moment the deadline passes. Renders nothing outside `dispute_window` / `dispute_resolved` statuses.
+- **Sources panel with freeze state** (`src/components/case-panel.tsx`): market sources render as clickable external links; after the first stake the panel shows the frozen source set (`frozen_sources`), a "frozen · config locked" tag, and the truncated `frozen_config_hash` proving the config snapshot.
+- **Void reason banner** (`src/components/case-panel.tsx`): voided markets surface a human-readable reason derived from on-chain `void_reason` (`winning_side_empty` vs `creator_void`), with refunds-open hint.
+
+### Fixed
+- **Broken build**: `case-panel.tsx` imported `./dispute-countdown` before the component existed; removed unused `windowOpen` / `disputeWindowOpen` / `disputeWindowRemaining` imports from the panel (logic lives in the countdown component).
+- **Stale tests** (`src/lib/actions.test.ts`): migrated the visibility matrix from the old single-shot `status: "resolved"` lifecycle to the current `dispute_window` / `dispute_resolved` / `disputed` statuses with live `dispute_deadline` fixtures (future/past), including: window-open vs window-closed dispute and settle gating, dispute-limit, fresh window after `resolve_dispute`, `add_source` hidden when sources are frozen, settle blocked on UNRESOLVED outcome.
+
+### Tests / build
+- 76/76 passing (`vitest run`, up from 60); production build passes (`next build`).
+- New coverage: `disputeDeadline`, `disputeWindowSeconds`, `disputeWindowOpen` (status/deadline boundary), `disputeWindowRemaining`, `frozenSources` (JSON parse + garbage), `sourcesFrozen` (strict boolean), `voidReasonLabel` (both reasons + non-void), `canVoid` (definite-outcome gating), plus 10 new visibility cases.
+
 ## v1.3.0 — Reviewer fixes (resubmission) — 2026-08-31
 
 ### Patch matrix

@@ -46,3 +46,7 @@ apps/prediction-market/fix-pm-deploy.mjs
 *.pre_ev
 .env
 *.pre_addr
+
+# python bytecode
+__pycache__/
+*.pyc

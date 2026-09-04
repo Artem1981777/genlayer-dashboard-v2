@@ -13,6 +13,8 @@ const GOOD1 = "https://en.wikipedia.org/wiki/The_Merge";
 const GOOD2 = "https://en.wikipedia.org/wiki/Ethereum";
 const MARKET_ID = "eth-merge-gating-test";
 const STAKE = 1000000000000000n;
+// Short dispute window so the deterministic test can wait it out if needed.
+const DISPUTE_WINDOW_SECONDS = Number(process.env.DISPUTE_WINDOW_SECONDS || 120);
 
 const account = createAccount(PK);
 const client = createClient({ chain: testnetBradbury, account });
@@ -49,7 +51,7 @@ async function robust(label, fn, tries) {
 const read = (addr) => robust("read", () => client.readContract({ address: addr, functionName: "get_state", args: [] }));
 
 async function deploy() {
-  const h = await robust("deploy", () => client.deployContract({ code, args: [QUESTION, RULES, GOOD1, GOOD2, "", MARKET_ID] }));
+  const h = await robust("deploy", () => client.deployContract({ code, args: [QUESTION, RULES, GOOD1, GOOD2, "", MARKET_ID, DISPUTE_WINDOW_SECONDS] }));
   await robust("deploy-wait", () => client.waitForTransactionReceipt({ hash: h, status: TransactionStatus.ACCEPTED, retries: 300 }));
   const tx = await robust("deploy-tx", () => client.getTransaction({ hash: h }));
   const addr = tx?.txDataDecoded?.contractAddress ?? tx?.recipient;
@@ -101,17 +103,22 @@ console.log("### T3: dispute before resolve reverts ###");
 const t3 = await call(c, "dispute", ["too early"], 0n);
 isRevert(t3) ? pass("dispute before resolve reverted") : fail("expected revert on early dispute", t3);
 
-console.log("### T4: stake YES (positive value) records position ###");
+console.log("### T4: stake YES (positive value) records position + freezes sources ###");
 const t4 = await call(c, "stake", ["YES"], STAKE);
 let s4 = await read(c);
 let p4 = myPos(s4);
 for (let i = 0; i < 60 && !(!isRevert(t4) && Number(s4.yes_pool) === Number(STAKE) && p4 && Number(p4.YES) === Number(STAKE)); i++) { await sleep(5000); s4 = await read(c); p4 = myPos(s4); }
 (!isRevert(t4) && Number(s4.yes_pool) === Number(STAKE) && p4 && Number(p4.YES) === Number(STAKE)) ? pass("payable stake recorded") : fail("stake not recorded", JSON.stringify({ t4, yes_pool: s4.yes_pool, p4 }));
+const frozenOk4 = s4.sources_frozen === true && s4.staking_started === true && Number(s4.first_stake_time) > 0;
+frozenOk4 ? pass("sources frozen at first stake") : fail("sources not frozen at first stake", JSON.stringify({ frozen: s4.sources_frozen, started: s4.staking_started, t: s4.first_stake_time }));
+console.log("### T4b: add_source after freeze reverts ###");
+const t4b = await call(c, "add_source", ["https://example.com/late"]);
+isRevert(t4b) ? pass("add_source after freeze reverted") : fail("expected revert on add_source after freeze", t4b);
 
 console.log("### T5: void (creator) open -> voided ###");
 const t5 = await call(c, "void", [], 0n);
 const s5 = await read(c);
-(!isRevert(t5) && s5.status === "voided") ? pass("void succeeded") : fail("void failed", JSON.stringify({ t5, status: s5.status }));
+(!isRevert(t5) && s5.status === "voided" && s5.void_reason === "creator_void") ? pass("void succeeded") : fail("void failed", JSON.stringify({ t5, status: s5.status, reason: s5.void_reason }));
 
 console.log("### T6: refund returns stake 1:1 ###");
 const t6 = await call(c, "refund", [], 0n);

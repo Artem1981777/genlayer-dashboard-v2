@@ -12,6 +12,9 @@ const SOURCE1 = "https://en.wikipedia.org/wiki/The_Merge";
 const SOURCE2 = "https://en.wikipedia.org/wiki/Ethereum";
 const SOURCE3 = "";
 const MARKET_ID = "eth-merge-pos";
+// Mandatory dispute window (reviewer point 2): 1 hour of disputable time between
+// resolve() and settle(). Configurable per deployment, always non-zero.
+const DISPUTE_WINDOW_SECONDS = Number(process.env.DISPUTE_WINDOW_SECONDS || 3600);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function retryMsOf(e) {
@@ -45,7 +48,7 @@ try { await client.initializeConsensusSmartContract(); console.log("consensus in
 catch (e) { console.log("consensus init skipped:", e && e.message ? e.message : String(e)); }
 
 console.log("Deploying PredictionMarketResolver...");
-const txHash = await withRetry("deploy", () => client.deployContract({ code, args: [QUESTION, RULES, SOURCE1, SOURCE2, SOURCE3, MARKET_ID] }));
+const txHash = await withRetry("deploy", () => client.deployContract({ code, args: [QUESTION, RULES, SOURCE1, SOURCE2, SOURCE3, MARKET_ID, DISPUTE_WINDOW_SECONDS] }));
 console.log("deploy tx:", txHash);
 await client.waitForTransactionReceipt({ hash: txHash, status: TransactionStatus.ACCEPTED, retries: 300 });
 const tx = await client.getTransaction({ hash: txHash });
