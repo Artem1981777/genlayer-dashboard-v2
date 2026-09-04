@@ -1,8 +1,17 @@
 # GenLayer Consensus Console
 
+## v1.4.0 — Dispute-window & market-lifecycle UI
+
+The dashboard now surfaces the full on-chain Prediction Market lifecycle introduced by the hardened contract: source freeze at first stake, the mandatory time-based dispute window, and void reasons. Tests: 76/76 (`vitest run`); production build passes (`next build`).
+
+- **Live dispute-window countdown** (`src/components/dispute-countdown.tsx`): ticks every second against the on-chain `dispute_deadline` (epoch seconds stored by `resolve()` / `resolve_dispute()`), shows % elapsed with a progress bar, turns warn-colored under 5 minutes, displays the exact local time settlement unlocks, and flips to a "window closed · outcome final · settlement unlocked" tag the moment the deadline passes. Renders nothing outside the `dispute_window` / `dispute_resolved` statuses.
+- **Sources panel with freeze state** (`src/components/case-panel.tsx`): market sources render as clickable external links; after the first stake the panel switches to the frozen source set (`frozen_sources`), shows a "frozen · config locked" tag and the truncated `frozen_config_hash` proving the config snapshot taken at freeze time.
+- **Void-reason banner** (`src/components/case-panel.tsx`): voided markets surface a human-readable reason derived from the on-chain `void_reason` (`winning_side_empty` — nobody backed the winning side, vs `creator_void`), with a refunds-open hint.
+- **Test migration** (`src/lib/actions.test.ts`): the visibility matrix moved from the obsolete single-shot `status: "resolved"` model to the current `dispute_window` / `dispute_resolved` / `disputed` statuses with live `dispute_deadline` fixtures (future/past), covering window-open vs window-closed dispute and settle gating, the 2-round dispute limit, the fresh window after `resolve_dispute`, `add_source` hidden once sources are frozen, and settle blocked on an UNRESOLVED outcome. New helper coverage: `disputeWindowOpen` (status/deadline boundary), `disputeWindowRemaining`, `frozenSources`, `sourcesFrozen`, `voidReasonLabel`, `canVoid`. Unit suite 60 → 76.
+
 ## Reviewer fixes — resubmission
 
-This resubmission addresses both points from the previous review. Tests: 60/60 (`vitest run`); production build passes (`next build`).
+This resubmission addresses both points from the previous review. Tests: 76/76 (`vitest run`); production build passes (`next build`).
 
 **1. Payable single-argument stake.** `stake(side)` is a single-argument payable call; the staked amount is passed only through the transaction `value` and must be strictly positive. The UI validates the amount before opening the wallet (`parseStakeWei`, `src/lib/actions.ts`) — empty, zero, negative and fractional inputs are rejected and never reach `writeContract`.
 
@@ -35,7 +44,7 @@ Multi-Source Oracle `update`: [tx](https://explorer-bradbury.genlayer.com/tx/0x5
 
 ### Verify locally
 
-- `npm test` — 60/60
+- `npm test` — 76/76
 - `npm run build`
 - `node tests/smoke.onchain.mjs`
 
@@ -70,11 +79,12 @@ Validators reason over a natural-language policy via a custom equivalence-princi
 Source: apps/prediction-market/contracts/prediction_market.py
 
 - stake(side): payable; takes ONE side argument (YES or NO) and requires a strictly positive value
-- resolve(): creator only; resolves from cited web sources
-- dispute(reason): gated — resolved market only, non-empty reason, and the caller must actually hold a stake in this market; max 2 dispute rounds
-- resolve_dispute(): creator only, on a disputed market
-- settle(): creator only; resolved market with a YES or NO outcome
-- void(): creator only; only while status is open and the outcome is not yet a definite YES/NO -> moves the market to voided
+- add_source(url): creator only, while open and before the first stake — the first stake freezes the source set and market config (question + rules + sources) on-chain for the rest of the lifecycle
+- resolve(): creator only; resolves from cited web sources; a YES/NO outcome opens a mandatory time-based dispute window (`dispute_deadline = resolve_time + dispute_window_seconds`)
+- dispute(reason): gated — only while the dispute window is open (status `dispute_window` / `dispute_resolved`, before `dispute_deadline`), non-empty reason, and the caller must actually hold a stake in this market; max 2 dispute rounds
+- resolve_dispute(): creator only, on a disputed market; every resolution event (initial or post-dispute) opens a fresh dispute window so an overturned outcome can still be contested
+- settle(): creator only; after the dispute window has closed, with a definite YES or NO outcome; if nobody backed the winning side the market auto-voids and refunds open
+- void(): creator only; while status is open / dispute_window / dispute_resolved and the outcome is not a definite YES/NO -> moves the market to voided with an on-chain reason (`creator_void` or `winning_side_empty`)
 - claim(): gated — settled market only, requires the caller's winning stake > 0, pays a pari-mutuel payout, single-use (anti-double-claim)
 - refund(): voided market only; returns each staker's full position 1:1 via emit_transfer(value=u256(...), on="finalized"), single-use (anti-double-refund)
 
@@ -116,9 +126,9 @@ Action buttons render only when the action is actually executable for the connec
 
 ## Tests
 
-54 unit tests, no mocks (vitest):
+76 unit tests, no mocks (vitest):
 
-- src/lib/actions.test.ts: 39 unit tests for role/phase visibility, per-caller claim/dispute gating (incl. non-empty dispute reason and shared-claims refund guard) and whyNot messages across all three contracts
+- src/lib/actions.test.ts: 58 unit tests for role/phase visibility across the current dispute-window lifecycle (dispute_window / dispute_resolved / disputed statuses with live dispute_deadline fixtures), per-caller claim/dispute/settle gating (incl. non-empty dispute reason, dispute-window open/closed boundary, 2-round dispute limit, add_source freeze gating and shared-claims refund guard), whyNot messages, and the dispute-window / freeze / void helper suite (disputeWindowOpen, disputeWindowRemaining, frozenSources, sourcesFrozen, voidReasonLabel, canVoid)
 - src/lib/projects.test.ts and src/lib/store.test.ts: config and tracked-contract store
 - src/lib/genlayer.test.ts and src/lib/live-moderator.test.ts: live get_state reads against deployed contracts
 
@@ -176,6 +186,11 @@ How to use: connect a wallet, click "Create escrow (deploy)", then fund -> submi
 - Payout (PAID): <https://explorer-bradbury.genlayer.com/tx/0x3de6b50ec807f43a569c29c870a273f5658b41cf9cdad4f5c3e454df65e74ba7>
 
 ## Changelog
+
+### v1.4.0 — Dispute-window & market-lifecycle UI (2026-09-04)
+- New live DisputeCountdown component (src/components/dispute-countdown.tsx): per-second countdown against the on-chain dispute_deadline, elapsed progress bar, warn under 5 min, closed-state tag when the window expires; renders nothing outside dispute_window / dispute_resolved.
+- Case panel (src/components/case-panel.tsx): sources panel with freeze state (frozen set + config hash after the first stake), void-reason banner (winning_side_empty vs creator_void), countdown wiring; unused imports removed.
+- Tests (src/lib/actions.test.ts): visibility matrix migrated to the current dispute_window / dispute_resolved / disputed lifecycle with future/past dispute_deadline fixtures; new helper coverage (disputeWindowOpen, disputeWindowRemaining, frozenSources, sourcesFrozen, voidReasonLabel, canVoid). Unit suite 60 -> 76; next build verified.
 
 ### Round 2 (reviewer resubmission)
 - Prediction Market: void() and refund() surfaced as real UI actions; claim/dispute gating rewritten to per-caller on-chain preconditions with disabled + tooltip buttons (src/lib/actions.ts, 39 unit tests). Tracked contract redeployed -> 0x3d17bD6d87563cB172E7C634341fBc8A14574035.
