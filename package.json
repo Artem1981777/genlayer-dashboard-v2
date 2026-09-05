@@ -1,7 +1,8 @@
 {
-  "name": "genlayer-dashboard",
+  "name": "genlayer-dashboard-v2",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://artem1981777.github.io/genlayer-dashboard-v2/",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

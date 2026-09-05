@@ -1,6 +1,6 @@
 import type { NextConfig } from "next"
 const isProd = process.env.NODE_ENV === "production"
-const repo = "genlayer-dashboard"
+const repo = "genlayer-dashboard-v2"
 const nextConfig: NextConfig = {
   output: "export",
   trailingSlash: true,
