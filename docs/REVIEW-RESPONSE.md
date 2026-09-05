@@ -20,13 +20,15 @@ Testnet Bradbury, and a real transaction:
   Deployed at `0x3d17bD6d87563cB172E7C634341fBc8A14574035`.
 - **Multi-Source Oracle** — `apps/multi-source-oracle/contracts/oracle.py`:
   `update(key)` (median-consensus BTC/USD from Coinbase, CoinGecko, Kraken with
-  tolerance and max-spread guards), `register_feed`, `remove_feed`.
-  Deployed at `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` — **that instance
-  is the older v1 implementation** (proven by a byte-for-byte parity audit via
-  `apps/multi-source-oracle/verify-relay.mjs`); redeploying the current v2
-  exact-value source there is prepared (`apps/multi-source-oracle/deploy-relay.mjs`)
-  and pending funded testnet credentials — see
-  [`apps/multi-source-oracle/README.md`](../apps/multi-source-oracle/README.md).
+  exact-value validator binding and max-spread guard), `register_feed`,
+  `remove_feed`. Deployed at `0x9bEcbdF8f3Cd6fABAeE5F737CE5B1B765ef9a1F5`
+  ([tx](https://explorer-bradbury.genlayer.com/tx/0x7d3a61d17b00b735fb5835c110a23efa41f7e7890d6a37d3fd81106ba674d974))
+  and **parity-proven byte-for-byte** against the repo source by
+  `apps/multi-source-oracle/verify-relay.mjs` (14,343 bytes, sha256 match).
+  A live `update(btc_usd)` finalized with median 79,626.00 from 3/3 sources
+  ([tx](https://explorer-bradbury.genlayer.com/tx/0xa72ddb7d7784f64c697f0d59e1ca07c3451526cae18c5be801b107028c3fdf54)).
+  The earlier `0x2Ab5…2C82` instance was the older v1 implementation (the
+  same parity check proved it) and is superseded.
 - **Content Moderator** — `apps/content-moderator/contracts/moderator.py`:
   `moderate`, `enforce`, `appeal`, `resolve_appeal`.
   Deployed at `0x235F51b11b9F96d6673df37553Ef58373c4324F9`.

@@ -97,6 +97,10 @@ server.listen(PORT, "127.0.0.1", () => {
   console.log("opening browser tab (keep it open)...");
   exec('start "" "http://127.0.0.1:' + PORT + '/"');
 });
+// Allow importing scripts (deploy-relay/register/update) to exit cleanly
+// once their work is done; the relay keeps serving in the background while
+// the event loop has other pending work.
+server.unref();
 
 // ---- fetch patch -----------------------------------------------------------
 const RELAY_URL = "http://127.0.0.1:" + PORT;

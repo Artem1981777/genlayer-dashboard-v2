@@ -20,7 +20,7 @@ verifiable by hash on the explorer.
 | --- | --- | --- | --- |
 | Content Moderator | `0x235F51b11b9F96d6673df37553Ef58373c4324F9` | `apps/content-moderator/contracts/moderator.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x235F51b11b9F96d6673df37553Ef58373c4324F9) |
 | Prediction Market | `0x3d17bD6d87563cB172E7C634341fBc8A14574035` | `apps/prediction-market/contracts/prediction_market.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x3d17bD6d87563cB172E7C634341fBc8A14574035) |
-| Multi-Source Oracle | `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` | `apps/multi-source-oracle/contracts/oracle.py` (v1 — see note below) | [explorer](https://explorer-bradbury.genlayer.com/address/0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82) |
+| Multi-Source Oracle (v2) | `0x9bEcbdF8f3Cd6fABAeE5F737CE5B1B765ef9a1F5` | `apps/multi-source-oracle/contracts/oracle.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x9bEcbdF8f3Cd6fABAeE5F737CE5B1B765ef9a1F5) |
 
 Deployment transactions:
 
@@ -29,8 +29,10 @@ Deployment transactions:
 | Content Moderator | [0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867](https://explorer-bradbury.genlayer.com/tx/0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867) |
 | Prediction Market (production) | [0xb7406f6a8788600e04d1a6bdc1200269f2665683c97b9d9e338450ca6a815063](https://explorer-bradbury.genlayer.com/tx/0xb7406f6a8788600e04d1a6bdc1200269f2665683c97b9d9e338450ca6a815063) |
 | Prediction Market (lifecycle test instance) | `0x8D0c1f6b433f12a937081f7f1FbBDC3Fd51B41B1` |
-| Multi-Source Oracle (hardened v1) | [0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
-| Oracle `register_feed` (btc_usd, 3 sources) | [0xc3d01a735038c563162e6b345c6e7a18c71ce4d8100fd0b9a37aa84a7962f652](https://explorer-bradbury.genlayer.com/tx/0xc3d01a735038c563162e6b345c6e7a18c71ce4d8100fd0b9a37aa84a7962f652) |
+| Multi-Source Oracle v2 (exact-value consensus, parity-proven) | [0x7d3a61d17b00b735fb5835c110a23efa41f7e7890d6a37d3fd81106ba674d974](https://explorer-bradbury.genlayer.com/tx/0x7d3a61d17b00b735fb5835c110a23efa41f7e7890d6a37d3fd81106ba674d974) |
+| Oracle `register_feed` (btc_usd, 3 sources, v2) | [0xb73b05d0fbf5d7eecafe8f6bf09efba1b7fb2ea9d18a812f86db16a9c40fc8c7](https://explorer-bradbury.genlayer.com/tx/0xb73b05d0fbf5d7eecafe8f6bf09efba1b7fb2ea9d18a812f86db16a9c40fc8c7) |
+| Oracle `update` (btc_usd, v2) | [0xa72ddb7d7784f64c697f0d59e1ca07c3451526cae18c5be801b107028c3fdf54](https://explorer-bradbury.genlayer.com/tx/0xa72ddb7d7784f64c697f0d59e1ca07c3451526cae18c5be801b107028c3fdf54) |
+| Multi-Source Oracle v1 (superseded) | [0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
 
 ---
 
@@ -65,23 +67,18 @@ Deployment transactions:
 
 ### Multi-Source Oracle (`oracle.py`)
 
-> **Note (parity audit):** a byte-for-byte parity check
-> (`apps/multi-source-oracle/verify-relay.mjs` — browser QUIC relay →
-> `ConsensusData.getTransactionData` → RLP-decode of the deploy calldata)
-> confirmed that the contract at `0x2Ab5…2C82` is the **older v1
-> implementation** (11,895 bytes) rather than the current v2 source in the
-> repo (14,343 bytes, exact-value consensus binding). The transactions below
-> were executed against that v1 deployment. Redeployment of the v2 source is
-> prepared (`apps/multi-source-oracle/deploy-relay.mjs`) and pending funded
-> testnet credentials; see
-> [`apps/multi-source-oracle/README.md`](../apps/multi-source-oracle/README.md)
-> ("Deployment status").
+> **Parity proof (v2):** the deployed code at `0x9bEc…a1F5` was verified
+> byte-for-byte against the repo source by `apps/multi-source-oracle/verify-relay.mjs`
+> (browser QUIC relay → `ConsensusData.getTransactionData` → RLP-decode of the
+> deploy calldata): 14,343 bytes, sha256 `1324409e…d64f5` on both sides.
+> The same check previously proved the superseded v1 instance (`0x2Ab5…2C82`,
+> 11,895 bytes) did not match the v2 source.
 
 | Action | Source location | Deployed at | Proof tx | Result |
 | --- | --- | --- | --- | --- |
-| `update(key)` | `oracle.py` — `@gl.public.write def update` | `0x2Ab5…2C82` | [0x5c3f94b5…cf2258c72](https://explorer-bradbury.genlayer.com/tx/0x5c3f94b50f9dc8c705f12bec8b5d37fffc3e0ef379eb44b2402c366cf2258c72) | FINALIZED (status 7); btc_usd median from 3 sources, spread 2 bps |
-| `register_feed(...)` | `oracle.py` — `@gl.public.write def register_feed` | `0x2Ab5…2C82` | [0xc3d01a73…7962f652](https://explorer-bradbury.genlayer.com/tx/0xc3d01a735038c563162e6b345c6e7a18c71ce4d8100fd0b9a37aa84a7962f652) | feed registered |
-| `get_state()` / `get(key)` (views) | `oracle.py` — `@gl.public.view` | `0x2Ab5…2C82` | live read (smoke test) | reads OK |
+| `update(key)` | `oracle.py` — `@gl.public.write def update` | `0x9bEc…a1F5` (v2) | [0xa72ddb7d…c3fdf54](https://explorer-bradbury.genlayer.com/tx/0xa72ddb7d7784f64c697f0d59e1ca07c3451526cae18c5be801b107028c3fdf54) | FINISHED_WITH_RETURN; btc_usd median 79,626.00 from 3/3 sources, spread 1 bps (exact-value consensus) |
+| `register_feed(...)` | `oracle.py` — `@gl.public.write def register_feed` | `0x9bEc…a1F5` (v2) | [0xb73b05d0…40fc8c7](https://explorer-bradbury.genlayer.com/tx/0xb73b05d0fbf5d7eecafe8f6bf09efba1b7fb2ea9d18a812f86db16a9c40fc8c7) | feed registered |
+| `get_state()` / `get(key)` (views) | `oracle.py` — `@gl.public.view` | `0x9bEc…a1F5` (v2) | live read (smoke test) | reads OK |
 
 ---
 
