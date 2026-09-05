@@ -2,11 +2,25 @@
 from genlayer import *
 import json
 # MultiSourceOracle: reusable source-grounded numeric oracle primitive.
-# Validators independently fetch several sources, extract a number, and reach
-# consensus on the median within a configurable tolerance. Every publication-
-# critical field (success, decimals, spread, source count, sample provenance)
-# is bound to validator recomputation: provenance is part of the COMPARED
-# result and all other fields are deterministically re-derived from it.
+#
+# CONSENSUS DESIGN - fail-safe, exact-value binding:
+#   * The leader fetches every configured source, extracts one number per
+#     source, and deterministically derives the full acceptance outcome
+#     (ok, median_units, spread_bps, sources_used) plus the provenance it
+#     was derived from.
+#   * Each validator INDEPENDENTLY re-fetches the same sources, re-derives
+#     its own full outcome from its own data, and accepts the leader's
+#     result only if the two outcomes are EXACTLY equal on every field.
+#     There is deliberately NO tolerance band on the median: the integer
+#     the validators verify is bit-for-bit the integer the contract
+#     persists.
+#   * tolerance_bps is used ONLY as a per-source liveness corroboration
+#     bound: every source the leader reported must still be served and be
+#     within tolerance_bps of the validator's own fresh reading. It only
+#     ever causes rejection; it never widens the set of acceptable
+#     medians.
+#   * If independent recomputation does not match exactly, consensus fails
+#     and NO value is published (fail-safe).
 def _extract_number(body: str):
     val = None
     try:
@@ -67,6 +81,21 @@ def _derive_result(prov, decimals, max_spread_bps):
         except Exception:
             pass
     return {"ok": ok, "reason": reason, "median": mu / (10 ** dec), "median_units": mu, "decimals": dec, "samples": [round(x, dec) for x in vals], "provenance": prov_out, "sources_used": n, "spread_bps": spread_bps}
+def _fetch_provenance(sources):
+    # Module-level on purpose: this helper contains the gl.nondet.web.get
+    # call and must be statically reachable from the functions passed to
+    # gl.vm.run_nondet_unsafe (GenVM lint rule E010).
+    prov = []
+    for i in range(len(sources)):
+        url = sources[i]
+        try:
+            body = gl.nondet.web.get(url).body.decode("utf-8")
+        except Exception:
+            body = ""
+        val = _extract_number(body)
+        if (val is not None) and (val > 0):
+            prov.append({"source": url, "value": val})
+    return prov
 class MultiSourceOracle(gl.Contract):
     owner: str
     feeds: str
@@ -162,20 +191,8 @@ class MultiSourceOracle(gl.Contract):
         tolerance_bps = int(cfg.get("tolerance_bps", 100))
         max_spread_bps = int(cfg.get("max_spread_bps", 500))
         decimals = int(cfg.get("decimals", 2))
-        def _fetch_prov():
-            prov = []
-            for i in range(len(sources)):
-                url = sources[i]
-                try:
-                    body = gl.nondet.web.get(url).body.decode("utf-8")
-                except Exception:
-                    body = ""
-                val = _extract_number(body)
-                if (val is not None) and (val > 0):
-                    prov.append({"source": url, "value": val})
-            return prov
         def leader_fn() -> str:
-            return json.dumps(_derive_result(_fetch_prov(), decimals, max_spread_bps))
+            return json.dumps(_derive_result(_fetch_provenance(sources), decimals, max_spread_bps))
         def validator_fn(leader_result) -> bool:
             if not isinstance(leader_result, gl.vm.Return):
                 return False
@@ -208,18 +225,33 @@ class MultiSourceOracle(gl.Contract):
                 if pv <= 0:
                     return False
                 lvals.append((u, pv))
+            # (1) Bind claims to evidence: the leader's stated outcome must be
+            # exactly the deterministic recomputation from the leader's own
+            # provenance. The leader cannot state an outcome its data does
+            # not support.
             reck = _derive_result([{"source": u, "value": pv} for (u, pv) in lvals], decimals, max_spread_bps)
             for f in ("ok", "median_units", "spread_bps", "sources_used", "decimals"):
                 if reck.get(f) != ld.get(f):
                     return False
-            v_prov = _fetch_prov()
-            vderive = _derive_result(v_prov, decimals, max_spread_bps)
-            if not bool(ld.get("ok", False)):
-                return not bool(vderive.get("ok", False))
+            # (2) The validator independently re-fetches the same sources and
+            # re-derives the FULL outcome from its own data.
+            v_prov = _fetch_provenance(sources)
+            vres = _derive_result(v_prov, decimals, max_spread_bps)
+            # (3) EXACT binding, no ranges: the validator's independently
+            # recomputed outcome must equal the leader's outcome on every
+            # field. median_units is compared for exact integer equality,
+            # and so are ok / spread_bps / sources_used / decimals. This is
+            # the integer that will be persisted, verified bit-for-bit.
+            for f in ("ok", "median_units", "spread_bps", "sources_used", "decimals"):
+                if vres.get(f) != ld.get(f):
+                    return False
+            # (4) Per-source liveness corroboration, bounded by tolerance_bps:
+            # every source the leader reported must be present in the
+            # validator's own fetch and agree within tolerance_bps. This
+            # check can only reject; it never accepts a range of medians.
             vmap = {}
             for p in v_prov:
                 vmap[str(p["source"])] = float(p["value"])
-            corroborated = 0
             for (u, pv) in lvals:
                 if u not in vmap:
                     return False
@@ -228,16 +260,11 @@ class MultiSourceOracle(gl.Contract):
                     return False
                 if abs(pv - mvv) * 10000 > tolerance_bps * abs(mvv):
                     return False
-                corroborated += 1
-            if corroborated < 2:
-                return False
-            if not bool(vderive.get("ok", False)):
-                return False
-            lu = int(ld.get("median_units", 0))
-            vu = int(vderive.get("median_units", 0))
-            if lu == 0:
-                return vu == 0
-            return abs(lu - vu) * 10000 <= tolerance_bps * abs(lu)
+            # (5) A failure outcome (ok=False) reaches acceptance only when
+            # the validator's independent recomputation failed identically
+            # (guaranteed by the exact match in (3)); the contract then
+            # refuses to publish any value.
+            return True
         raw = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
         data = None
         try:
@@ -255,6 +282,10 @@ class MultiSourceOracle(gl.Contract):
         assert isinstance(prov_in, list), "Oracle result missing source provenance"
         prov = [{"source": str(p.get("source", "")), "value": float(p.get("value", 0))} for p in prov_in if isinstance(p, dict) and str(p.get("source", "")) in sources]
         canon = _derive_result(prov, decimals, max_spread_bps)
+        # Defense in depth: the outcome that gets persisted must be exactly
+        # the outcome that consensus verified.
+        for f in ("ok", "median_units", "spread_bps", "sources_used", "decimals"):
+            assert canon.get(f) == data.get(f), "Consensus result failed canonical re-derivation"
         assert bool(canon.get("ok", False)), "Oracle update rejected: " + str(data.get("reason", "sources disagreed"))
         median_units = int(canon.get("median_units", 0))
         dec = decimals

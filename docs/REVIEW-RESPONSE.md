@@ -21,7 +21,12 @@ Testnet Bradbury, and a real transaction:
 - **Multi-Source Oracle** — `apps/multi-source-oracle/contracts/oracle.py`:
   `update(key)` (median-consensus BTC/USD from Coinbase, CoinGecko, Kraken with
   tolerance and max-spread guards), `register_feed`, `remove_feed`.
-  Deployed at `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82`.
+  Deployed at `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` — **that instance
+  is the older v1 implementation** (proven by a byte-for-byte parity audit via
+  `apps/multi-source-oracle/verify-relay.mjs`); redeploying the current v2
+  exact-value source there is prepared (`apps/multi-source-oracle/deploy-relay.mjs`)
+  and pending funded testnet credentials — see
+  [`apps/multi-source-oracle/README.md`](../apps/multi-source-oracle/README.md).
 - **Content Moderator** — `apps/content-moderator/contracts/moderator.py`:
   `moderate`, `enforce`, `appeal`, `resolve_appeal`.
   Deployed at `0x235F51b11b9F96d6673df37553Ef58373c4324F9`.

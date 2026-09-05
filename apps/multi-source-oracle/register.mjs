@@ -1,9 +1,24 @@
+// register.mjs — register the btc_usd feed on the deployed oracle.
+//
+// By default this script tunnels all RPC through the browser QUIC relay
+// (rpc-relay.mjs) because the direct TCP path to the Bradbury RPC is broken
+// by DPI. Pass --direct to use the plain network path instead.
+//
+// Usage (from apps/multi-source-oracle):
+//   node --env-file=../../.env register.mjs          # via relay (default)
+//   node --env-file=../../.env register.mjs --direct # without relay
 import { readFileSync } from "node:fs";
 import { createClient, createAccount } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
+import { installFetchRelay } from "./rpc-relay.mjs";
 const PK = process.env.PRIVATE_KEY;
 if(!PK){ throw new Error("PRIVATE_KEY missing. Run: node --env-file=../../.env register.mjs"); }
+if(!process.argv.includes("--direct")){
+  installFetchRelay();
+  console.log("waiting 8s for the browser relay tab...");
+  await new Promise(r=>setTimeout(r,8000));
+}
 const ADDR = (process.env.ORACLE || readFileSync("contract.txt","utf8")).trim();
 const account = createAccount(PK);
 const client = createClient({ chain: testnetBradbury, account });

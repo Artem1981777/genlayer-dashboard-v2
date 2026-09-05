@@ -96,7 +96,7 @@ prices are computed inside the Intelligent Contracts under validator consensus.
 | --- | --- | --- | --- | --- |
 | Content Moderator | `0x235F51b11b9F96d6673df37553Ef58373c4324F9` | [explorer](https://explorer-bradbury.genlayer.com/address/0x235F51b11b9F96d6673df37553Ef58373c4324F9) | [`apps/content-moderator/contracts/moderator.py`](apps/content-moderator/contracts/moderator.py) | [tx](https://explorer-bradbury.genlayer.com/tx/0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867) |
 | Prediction Market | `0x3d17bD6d87563cB172E7C634341fBc8A14574035` | [explorer](https://explorer-bradbury.genlayer.com/address/0x3d17bD6d87563cB172E7C634341fBc8A14574035) | [`apps/prediction-market/contracts/prediction_market.py`](apps/prediction-market/contracts/prediction_market.py) | [tx](https://explorer-bradbury.genlayer.com/tx/0xb7406f6a8788600e04d1a6bdc1200269f2665683c97b9d9e338450ca6a815063) |
-| Multi-Source Oracle | `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` | [explorer](https://explorer-bradbury.genlayer.com/address/0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82) | [`apps/multi-source-oracle/contracts/oracle.py`](apps/multi-source-oracle/contracts/oracle.py) | [tx](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
+| Multi-Source Oracle | `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` | [explorer](https://explorer-bradbury.genlayer.com/address/0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82) | [`apps/multi-source-oracle/contracts/oracle.py`](apps/multi-source-oracle/contracts/oracle.py) (v1 deployed; v2 exact-value revision pending redeploy — see [app README](apps/multi-source-oracle/README.md#deployment-status)) | [tx](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
 
 Additional addresses (history / test instances):
 
@@ -163,10 +163,12 @@ Purpose: publish a median price from multiple independent web sources with sprea
 | `get(key)` / `get_value(key)` / `get_feed(key)` / `list_feeds()` | view | — | feed/value reads |
 | `is_stale(key, max_age_rounds)` | view | — | staleness check |
 
-Invariants: publication requires ≥ 2 usable sources within `tolerance_bps` and a spread
-≤ `max_spread_bps`; every published field (ok, median, spread, count, provenance) is
-re-derived from validator-corroborated data; on guard failure the update is rejected and
-state does not change. The live `btc_usd` feed uses Coinbase, CoinGecko and Kraken with
+Invariants: publication requires ≥ 2 usable sources and a spread ≤ `max_spread_bps`;
+the validator must independently re-derive the **exact same outcome** (ok, median,
+spread, count, decimals) from its own fetches — there is no tolerance band on the
+median; `tolerance_bps` only bounds per-source liveness corroboration between the
+leader's and validator's fetches. On guard failure the update is rejected and state
+does not change. The live `btc_usd` feed uses Coinbase, CoinGecko and Kraken with
 tolerance 100 bps and max spread 500 bps.
 
 ## Consensus design
@@ -196,12 +198,16 @@ tolerance 100 bps and max spread 500 bps.
 ### Multi-Source Oracle — `update(key)`
 
 - Pattern: **custom non-deterministic block** (`gl.vm.run_nondet_unsafe(leader_fn, validator_fn)`).
-- Leader: fetches every source (`gl.nondet.web.get`), extracts the number, derives the
-  median, spread (bps) and provenance deterministically (`_derive_result`).
-- Validator: first checks `isinstance(leader_result, gl.vm.Return)`; re-derives every
-  publication-critical field from the leader's provenance; then **independently re-fetches
-  all sources** and requires ≥ 2 corroborated values within `tolerance_bps`, plus a median
-  within tolerance. Nothing is published from leader-supplied data alone.
+- Leader: fetches every source (`gl.nondet.web.get` via the module-level
+  `_fetch_provenance` helper), extracts the number, derives the full outcome —
+  `ok`, `median_units`, `spread_bps`, `sources_used`, `decimals`, `provenance` —
+  deterministically (`_derive_result`).
+- Validator: first checks `isinstance(leader_result, gl.vm.Return)`; re-derives the
+  outcome from the leader's provenance (claims must be bound to evidence); then
+  **independently re-fetches all sources** and re-derives its own outcome, requiring
+  **exact equality on every field** — no tolerance band on the median. Per-source
+  liveness corroboration within `tolerance_bps` can only reject, never widen the
+  accepted set. Nothing is published from leader-supplied data alone.
 - Guards: `ok = (n >= 2) and (spread_bps <= max_spread_bps)`; on failure the update is
   rejected (`assert canon.ok`) and state does not change.
 

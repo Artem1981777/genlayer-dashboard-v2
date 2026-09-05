@@ -20,7 +20,7 @@ verifiable by hash on the explorer.
 | --- | --- | --- | --- |
 | Content Moderator | `0x235F51b11b9F96d6673df37553Ef58373c4324F9` | `apps/content-moderator/contracts/moderator.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x235F51b11b9F96d6673df37553Ef58373c4324F9) |
 | Prediction Market | `0x3d17bD6d87563cB172E7C634341fBc8A14574035` | `apps/prediction-market/contracts/prediction_market.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x3d17bD6d87563cB172E7C634341fBc8A14574035) |
-| Multi-Source Oracle | `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` | `apps/multi-source-oracle/contracts/oracle.py` | [explorer](https://explorer-bradbury.genlayer.com/address/0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82) |
+| Multi-Source Oracle | `0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82` | `apps/multi-source-oracle/contracts/oracle.py` (v1 — see note below) | [explorer](https://explorer-bradbury.genlayer.com/address/0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82) |
 
 Deployment transactions:
 
@@ -29,7 +29,7 @@ Deployment transactions:
 | Content Moderator | [0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867](https://explorer-bradbury.genlayer.com/tx/0xa05d3619563ce7ca31f01b34f3f82f89e868c4a4131d5896513339ec6f001867) |
 | Prediction Market (production) | [0xb7406f6a8788600e04d1a6bdc1200269f2665683c97b9d9e338450ca6a815063](https://explorer-bradbury.genlayer.com/tx/0xb7406f6a8788600e04d1a6bdc1200269f2665683c97b9d9e338450ca6a815063) |
 | Prediction Market (lifecycle test instance) | `0x8D0c1f6b433f12a937081f7f1FbBDC3Fd51B41B1` |
-| Multi-Source Oracle (hardened) | [0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
+| Multi-Source Oracle (hardened v1) | [0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c](https://explorer-bradbury.genlayer.com/tx/0x75446ed8583355ad8b6738d3e4e3d03296049fb7c3c1a05825d3e8979dc0d20c) |
 | Oracle `register_feed` (btc_usd, 3 sources) | [0xc3d01a735038c563162e6b345c6e7a18c71ce4d8100fd0b9a37aa84a7962f652](https://explorer-bradbury.genlayer.com/tx/0xc3d01a735038c563162e6b345c6e7a18c71ce4d8100fd0b9a37aa84a7962f652) |
 
 ---
@@ -64,6 +64,18 @@ Deployment transactions:
 | `get_state()` (view) | `prediction_market.py` — `@gl.public.view def get_state` | `0x3d17…4035` | live read (smoke test) | reads OK |
 
 ### Multi-Source Oracle (`oracle.py`)
+
+> **Note (parity audit):** a byte-for-byte parity check
+> (`apps/multi-source-oracle/verify-relay.mjs` — browser QUIC relay →
+> `ConsensusData.getTransactionData` → RLP-decode of the deploy calldata)
+> confirmed that the contract at `0x2Ab5…2C82` is the **older v1
+> implementation** (11,895 bytes) rather than the current v2 source in the
+> repo (14,343 bytes, exact-value consensus binding). The transactions below
+> were executed against that v1 deployment. Redeployment of the v2 source is
+> prepared (`apps/multi-source-oracle/deploy-relay.mjs`) and pending funded
+> testnet credentials; see
+> [`apps/multi-source-oracle/README.md`](../apps/multi-source-oracle/README.md)
+> ("Deployment status").
 
 | Action | Source location | Deployed at | Proof tx | Result |
 | --- | --- | --- | --- | --- |
