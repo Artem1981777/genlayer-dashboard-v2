@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.5.0 — Review evidence pack, README rewrite, green toolchain — 2026-09-04
+
+### Added
+- **docs/EVIDENCE.md**: full action → source → deployment → transaction matrix for all
+  three contracts; accepted-receipt lifecycle proof; independent verification steps.
+- **docs/REVIEW-RESPONSE.md**: point-by-point steward response (source for every
+  advertised action; accepted-receipt lifecycle) with explorer links.
+- **tests/probe-reads.mjs**: diagnostic live reads (with retries) against all three
+  deployed contracts.
+- **README.md rewritten**: architecture diagram, deployed-contract table with explorer +
+  deploy-tx links, per-contract method tables, consensus design per nondeterministic
+  method, transaction lifecycle with the strict status table, quick start, deploy,
+  testing, usage walkthroughs with real tx links, project structure, security &
+  limitations, roadmap, and official links.
+- **Steward response text** (≤ 200 words, EN) recorded in `docs/REVIEW-RESPONSE.md` for
+  the portal reply.
+
+### Fixed
+- **Typecheck**: `src/app/escrow/page.tsx` — typed `sleep`, `reached`, `lastErr` and
+  error-message extraction; `npx tsc --noEmit` is now clean (7 errors → 0).
+- **tests/smoke.onchain.mjs**: added the Multi-Source Oracle to the smoke target and
+  retriable patterns for transient Bradbury RPC transport errors ("fetch failed",
+  "terminated"); smoke now passes against all three contracts.
+
+### Tests / build
+- 76/76 unit tests passing (`vitest run`); `npx tsc --noEmit` clean; `next build` passes;
+  `node tests/smoke.onchain.mjs` reads all three deployed contracts live.
+
 ## v1.4.0 — Dispute-window & market-lifecycle UI — 2026-09-04
 
 ### Added
