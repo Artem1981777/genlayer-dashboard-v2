@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.5.1 — Repo hygiene — 2026-09-05
+
+### Removed
+- One-off scaffolding scripts that were never part of the shipped toolchain:
+  `_patch_genlayer.mjs`, `_patch_page_panel.mjs`, `_patch_panel.mjs`,
+  `_patch_panel2.mjs`, `patch_dash.py`, root `deploy.mjs`, root `probe.mjs`.
+  Canonical deploy/probe scripts live under `apps/*/deploy.mjs` and
+  `tests/probe-reads.mjs` / `tests/smoke.onchain.mjs`.
+
+### Tests / build
+- 76/76 unit tests passing; `next build` passes; live smoke reads all three
+  deployed contracts — all re-verified after the cleanup.
+
 ## v1.5.0 — Review evidence pack, README rewrite, green toolchain — 2026-09-04
 
 ### Added
