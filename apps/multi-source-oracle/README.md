@@ -70,7 +70,7 @@ consensus.
 | "Validator still accepts a range of median integers while the leader's exact integer is stored" | The tolerance-based median comparison (`abs(lu - vu) * 10000 <= tolerance_bps * abs(lu)`) was **removed**. The validator's recomputed `median_units` must equal the leader's exactly. | done, proven by sim T2 |
 | "Does not require the validator's independently recomputed success/spread result to match" | The validator now re-derives the **full outcome** from its own fetch and requires exact equality on `ok`, `median_units`, `spread_bps`, `sources_used`, `decimals`. | done, proven by sim T1–T8 |
 | "The submitted revision also fails GenVM lint" | The `gl.nondet.web.get` call was moved into a module-level helper `_fetch_provenance(sources)` so it is statically reachable from the `run_nondet_unsafe` leader/validator entry points (lint rule E010). `genvm-linter` 0.11.0 now reports **0 issues**. | done, re-verified locally |
-| "The supplied Explorer deployment is the older implementation" | A byte-for-byte parity check (`verify-relay.mjs`, see below) **confirmed** the reviewer: the contract at `0x2Ab5…2C82` is the older v1 implementation (11,895 bytes vs. 14,343 bytes local). A fresh deployment of this exact v2 source is pending — see "Deployment status". | parity check done; redeploy pending |
+| "The supplied Explorer deployment is the older implementation" | A byte-for-byte parity check (`verify-relay.mjs`, see below) **confirmed** the reviewer: the contract at `0x2Ab5…2C82` was the older v1 implementation (11,895 bytes vs. 14,343 bytes local). The exact v2 source has since been deployed at `0x9bEc…a1F5` and re-verified byte-for-byte (sha256 match) — see "Deployment status". | done: v2 deployed + parity-proven |
 
 `tolerance_bps` is still a feed parameter, but its role changed: it is now
 only a per-source liveness corroboration bound (a source that stops being
@@ -183,29 +183,33 @@ report **MATCH** (deployed calldata identical to
 
 ## Deployment status
 
-**The currently deployed contract (`0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82`,
-deploy tx `0x75446ed8…0d20c`) is the OLDER v1 implementation — not this v2
-source.** A byte-for-byte parity check via `verify-relay.mjs` (browser QUIC
-relay → `eth_call ConsensusData.getTransactionData` → RLP-decode of the deploy
-calldata) confirmed it: the deployed code is 11,895 bytes while the local v2
-source is 14,343 bytes; the first divergence is at byte 83 (the v2 source
-carries the GenVM `# { "Depends": … }` preamble and the revised docstring).
-This confirms the reviewer's complaint that the Explorer deployment was the
-older implementation — v2 was never deployed.
+**Current deployment (v2, exact-value consensus):**
 
-Redeployment of the exact v2 source is **ready but blocked on credentials**:
-`.env` still contains the placeholder private key. Once a funded Bradbury
-testnet key is placed there:
+| Item | Value |
+| --- | --- |
+| Contract address | `0x9bEcbdF8f3Cd6fABAeE5F737CE5B1B765ef9a1F5` |
+| Deploy tx | [`0x7d3a61d1…674d974`](https://explorer-bradbury.genlayer.com/tx/0x7d3a61d17b00b735fb5835c110a23efa41f7e7890d6a37d3fd81106ba674d974) — ACCEPTED, FINISHED_WITH_RETURN |
+| Parity proof | `verify-relay.mjs`: deployed code 14,343 bytes, sha256 `1324409e…d64f5` — **byte-for-byte identical** to [`contracts/oracle.py`](contracts/oracle.py) (proof saved to `parity-proof.txt`) |
+| `register_feed` (btc_usd) | [`0xb73b05d0…40fc8c7`](https://explorer-bradbury.genlayer.com/tx/0xb73b05d0fbf5d7eecafe8f6bf09efba1b7fb2ea9d18a812f86db16a9c40fc8c7) |
+| `update(btc_usd)` | [`0xa72ddb7d…c3fdf54`](https://explorer-bradbury.genlayer.com/tx/0xa72ddb7d7784f64c697f0d59e1ca07c3451526cae18c5be801b107028c3fdf54) — FINISHED_WITH_RETURN; median 79,626.00 USD (3/3 sources, spread 1 bps) |
+
+**History:** the previous deployment (`0x2Ab508Bb9Be84ea4ea8388b9b8872017729a2C82`,
+tx `0x75446ed8…0d20c`) was the older v1 implementation — proven by the same
+byte-for-byte parity check (deployed 11,895 bytes vs. 14,343 local, first
+divergence at byte 83). That confirmed the reviewer's complaint; the v2 source
+above supersedes it.
+
+To redeploy from scratch (from this directory):
 
 ```bash
-node --env-file=../../.env deploy-relay.mjs   # with http://localhost:8898/ open in a browser
-node verify-relay.mjs                          # parity must report MATCH
+node --env-file=../../.env deploy-relay.mjs   # opens http://localhost:8898/ in a browser — keep the tab open
+node verify-relay.mjs                          # parity must report PARITY OK
 node --env-file=../../.env register.mjs
 node --env-file=../../.env update.mjs
 ```
 
-Then update `contract.txt`, `deploy-tx.txt`, and the root README evidence
-table with the new address and tx.
+`contract.txt` / `deploy-tx.txt` always hold the current deployment's address
+and tx hash.
 
 ## Security notes
 
